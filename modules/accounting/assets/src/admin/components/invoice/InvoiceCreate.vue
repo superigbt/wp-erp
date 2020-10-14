@@ -475,7 +475,6 @@ export default {
             let taxAmount     = 0;
             let totalDiscount = 0;
             let totalAmount   = 0;
-
             this.transactionLines.forEach(element => {
                 if (element.qty) {
                     taxAmount     += parseFloat(element.taxAmount);
@@ -556,7 +555,6 @@ export default {
                 }
             });
         },
-
         submitInvoiceForm() {
             this.validateForm();
 

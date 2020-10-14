@@ -15176,7 +15176,7 @@ module.exports = "data:image/svg+xml;base64,PD94bWwgdmVyc2lvbj0iMS4wIiBzdGFuZGFs
       }).catch(function (error) {
         _this2.$store.dispatch('spinner/setSpinner', false);
 
-        throw error;
+        _this2.showAlert('warning', error.response.data);
       });
     },
     loaded: function loaded() {
@@ -21454,6 +21454,7 @@ function _objectSpread(target) { for (var i = 1; i < arguments.length; i++) { va
 /* harmony import */ var __WEBPACK_IMPORTED_MODULE_8_admin_components_purchase_PurchaseRow_vue__ = __webpack_require__(367);
 /* harmony import */ var __WEBPACK_IMPORTED_MODULE_9_admin_components_people_SelectVendors_vue__ = __webpack_require__(153);
 /* harmony import */ var __WEBPACK_IMPORTED_MODULE_10_admin_components_base_ShowErrors_vue__ = __webpack_require__(6);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_11_admin_components_select_MultiSelect_vue__ = __webpack_require__(2);
 
 
 
@@ -21595,6 +21596,47 @@ function _objectSpread(target) { for (var i = 1; i < arguments.length; i++) { va
 //
 //
 //
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+
 
 
 
@@ -21611,7 +21653,8 @@ function _objectSpread(target) { for (var i = 1; i < arguments.length; i++) { va
     ComboButton: __WEBPACK_IMPORTED_MODULE_7_admin_components_select_ComboButton_vue__["a" /* default */],
     PurchaseRow: __WEBPACK_IMPORTED_MODULE_8_admin_components_purchase_PurchaseRow_vue__["a" /* default */],
     SelectVendors: __WEBPACK_IMPORTED_MODULE_9_admin_components_people_SelectVendors_vue__["a" /* default */],
-    ShowErrors: __WEBPACK_IMPORTED_MODULE_10_admin_components_base_ShowErrors_vue__["a" /* default */]
+    ShowErrors: __WEBPACK_IMPORTED_MODULE_10_admin_components_base_ShowErrors_vue__["a" /* default */],
+    MultiSelect: __WEBPACK_IMPORTED_MODULE_11_admin_components_select_MultiSelect_vue__["a" /* default */]
   },
   data: function data() {
     return {
@@ -21658,7 +21701,9 @@ function _objectSpread(target) { for (var i = 1; i < arguments.length; i++) { va
       isWorking: false,
       purchase_title: '',
       purchase_order: 0,
-      page_title: ''
+      page_title: '',
+      taxRates: [],
+      taxRate: ''
     };
   },
   watch: {
@@ -21668,13 +21713,59 @@ function _objectSpread(target) { for (var i = 1; i < arguments.length; i++) { va
       }
     }
   },
-  computed: _objectSpread({}, Object(__WEBPACK_IMPORTED_MODULE_3_vuex__["b" /* mapState */])({
+  computed: _objectSpread(_objectSpread({}, Object(__WEBPACK_IMPORTED_MODULE_3_vuex__["b" /* mapState */])({
     actionType: function actionType(state) {
       return state.combo.btnID;
     }
-  })),
+  })), {}, {
+    totalAmount: function totalAmount() {
+      var total = 0;
+      this.transactionLines.forEach(function (item) {
+        if (item.product && item.quantity && item.unitPrice) {
+          total += parseInt(item.quantity) * parseFloat(item.unitPrice);
+        }
+      });
+      return total + this.taxTotalAmount;
+    },
+    taxTotalAmount: function taxTotalAmount() {
+      var _this = this;
+
+      if (!this.taxRate) return 0;
+      var rates = this.taxRates.filter(function (item) {
+        return _this.taxRate.id == item.tax_rate_id;
+      });
+      var totalTax = 0;
+      this.transactionLines.map(function (item) {
+        if (item.product && item.quantity && item.unitPrice) {
+          if (item.applyTax && item.tax_cat_id && rates.length) {
+            var taxRate = rates.filter(function (r) {
+              return r.sales_tax_category_id == item.tax_cat_id;
+            });
+            taxRate = taxRate.length ? taxRate[0].tax_rate : 0;
+            item.taxAmount = item.quantity * item.unitPrice * taxRate / 100;
+            totalTax += item.taxAmount;
+          }
+        }
+      });
+      return totalTax;
+    },
+    taxZones: function taxZones() {
+      var zones = [];
+      var id = '';
+      this.taxRates.forEach(function (item) {
+        zones[item.tax_zone_id] = {
+          id: item.tax_rate_id,
+          name: item.tax_rate_name,
+          tax_rate: item.tax_rate,
+          agency_id: item.agency_id,
+          tax_cat_id: item.sales_tax_category_id
+        };
+      });
+      return zones;
+    }
+  }),
   created: function created() {
-    var _this = this;
+    var _this2 = this;
 
     if (this.$route.name === 'PurchaseOrderCreate') {
       this.page_title = 'Purchase Order';
@@ -21691,23 +21782,54 @@ function _objectSpread(target) { for (var i = 1; i < arguments.length; i++) { va
 
     this.prepareDataLoad();
     this.$root.$on('remove-row', function (index) {
-      if (_this.transactionLines.length < 2) {
+      if (_this2.transactionLines.length < 2) {
         return;
       }
 
-      _this.$delete(_this.transactionLines, index);
+      _this2.$delete(_this2.transactionLines, index);
 
-      _this.updateFinalAmount();
+      _this2.updateFinalAmount();
     });
     this.$root.$on('total-updated', function (amount) {
-      _this.updateFinalAmount();
+      _this2.updateFinalAmount();
     }); // initialize combo button id with `update`
 
     this.$store.dispatch('combo/setBtnID', 'update');
   },
   methods: {
+    setLineData: function setLineData(line) {
+      line.quantity = 1;
+
+      if (this.$route.params.id) {
+        line.unitPrice = parseFloat(line.product.cost_price);
+      } else {
+        line.unitPrice = parseFloat(line.product.unitPrice);
+      }
+
+      line.amount = line.quantity * line.unitPrice;
+      line.tax_cat_id = line.product.tax_cat_id;
+
+      if (parseInt(line.product.tax_cat_id)) {
+        line.applyTax = true;
+        line.taxAmount = 0;
+      } // this.$forceUpdate();
+
+    },
+    lineUpdate: function lineUpdate(index) {
+      var line = this.transactionLines[index];
+      line.amount = parseInt(line.quantity) * parseFloat(line.unitPrice);
+      this.$set(this.transactionLines, index, line);
+    },
+    disableLineTax: function disableLineTax(index) {
+      var line = this.transactionLines[index];
+      line.taxAmount = !line.applyTax ? 0 : line.taxAmount;
+      this.$set(this.transactionLines, index, line);
+    },
+    removeRow: function removeRow(index) {
+      this.transactionLines.splice(index, 1);
+    },
     prepareDataLoad: function prepareDataLoad() {
-      var _this2 = this;
+      var _this3 = this;
 
       return __WEBPACK_IMPORTED_MODULE_1__babel_runtime_helpers_asyncToGenerator___default()( /*#__PURE__*/regeneratorRuntime.mark(function _callee() {
         var _yield$Promise$all, _yield$Promise$all2, request, canEdit, purchase_data;
@@ -21716,15 +21838,15 @@ function _objectSpread(target) { for (var i = 1; i < arguments.length; i++) { va
           while (1) {
             switch (_context.prev = _context.next) {
               case 0:
-                if (!_this2.$route.params.id) {
+                if (!_this3.$route.params.id) {
                   _context.next = 18;
                   break;
                 }
 
-                _this2.editMode = true;
-                _this2.voucherNo = _this2.$route.params.id;
+                _this3.editMode = true;
+                _this3.voucherNo = _this3.$route.params.id;
                 _context.next = 5;
-                return Promise.all([__WEBPACK_IMPORTED_MODULE_4_admin_http__["a" /* default */].get("/purchases/".concat(_this2.$route.params.id))]);
+                return Promise.all([__WEBPACK_IMPORTED_MODULE_4_admin_http__["a" /* default */].get("/purchases/".concat(_this3.$route.params.id))]);
 
               case 5:
                 _yield$Promise$all = _context.sent;
@@ -21737,7 +21859,7 @@ function _objectSpread(target) { for (var i = 1; i < arguments.length; i++) { va
                   break;
                 }
 
-                _this2.showAlert('error', 'Can\'t edit');
+                _this3.showAlert('error', 'Can\'t edit');
 
                 return _context.abrupt("return");
 
@@ -21745,13 +21867,13 @@ function _objectSpread(target) { for (var i = 1; i < arguments.length; i++) { va
                 purchase_data = request.data;
 
                 if (purchase_data) {
-                  _this2.getProducts(purchase_data.vendor_id);
+                  _this3.getProducts(purchase_data.vendor_id);
                 }
 
-                _this2.setDataForEdit(request.data); // initialize combo button id with `update`
+                _this3.setDataForEdit(request.data); // initialize combo button id with `update`
 
 
-                _this2.$store.dispatch('combo/setBtnID', 'update');
+                _this3.$store.dispatch('combo/setBtnID', 'update');
 
                 _context.next = 22;
                 break;
@@ -21762,13 +21884,13 @@ function _objectSpread(target) { for (var i = 1; i < arguments.length; i++) { va
                      * create a new purchase
                      * -----------------------------------------------
                      */
-                _this2.basic_fields.trn_date = erp_acct_var.current_date;
-                _this2.basic_fields.due_date = erp_acct_var.current_date;
+                _this3.basic_fields.trn_date = erp_acct_var.current_date;
+                _this3.basic_fields.due_date = erp_acct_var.current_date;
 
-                _this2.transactionLines.push({}, {}, {}); // initialize combo button id with `save`
+                _this3.transactionLines.push({}, {}, {}); // initialize combo button id with `save`
 
 
-                _this2.$store.dispatch('combo/setBtnID', 'save');
+                _this3.$store.dispatch('combo/setBtnID', 'save');
 
               case 22:
               case "end":
@@ -21812,7 +21934,7 @@ function _objectSpread(target) { for (var i = 1; i < arguments.length; i++) { va
       this.$store.dispatch('combo/setBtnID', 'save');
     },
     getProducts: function getProducts(vendor_id) {
-      var _this3 = this;
+      var _this4 = this;
 
       this.products = [];
 
@@ -21827,22 +21949,33 @@ function _objectSpread(target) { for (var i = 1; i < arguments.length; i++) { va
         }
       }).then(function (response) {
         response.data.forEach(function (element) {
-          _this3.products.push({
+          _this4.products.push({
             id: element.id,
             name: element.name,
-            unitPrice: element.cost_price
+            unitPrice: element.cost_price,
+            tax_cat_id: parseInt(element.tax_cat_id) || null,
+            product_type_name: element.product_type_name
           });
         });
 
-        _this3.$store.dispatch('spinner/setSpinner', false);
+        _this4.getTaxRates();
+
+        _this4.$store.dispatch('spinner/setSpinner', false);
       }).catch(function (error) {
-        _this3.$store.dispatch('spinner/setSpinner', false);
+        _this4.$store.dispatch('spinner/setSpinner', false);
 
         throw error;
       });
     },
+    getTaxRates: function getTaxRates() {
+      var _this5 = this;
+
+      __WEBPACK_IMPORTED_MODULE_4_admin_http__["a" /* default */].get('/taxes/summary').then(function (response) {
+        _this5.taxRates = response.data;
+      });
+    },
     getvendorData: function getvendorData() {
-      var _this4 = this;
+      var _this6 = this;
 
       var vendor_id = this.basic_fields.vendor.id;
 
@@ -21860,7 +21993,7 @@ function _objectSpread(target) { for (var i = 1; i < arguments.length; i++) { va
         var postal_code = billing.postal_code ? billing.postal_code : '';
         var country = billing.country ? billing.country : '';
         var address = "".concat(street_1, " ").concat(street_2, " \n").concat(city, " \n").concat(state, " ").concat(postal_code, " \n").concat(country);
-        _this4.basic_fields.billing_address = address;
+        _this6.basic_fields.billing_address = address;
       });
       this.getProducts();
     },
@@ -21883,63 +22016,66 @@ function _objectSpread(target) { for (var i = 1; i < arguments.length; i++) { va
     formatLineItems: function formatLineItems() {
       var lineItems = [];
       this.transactionLines.forEach(function (line) {
-        if (Object.prototype.hasOwnProperty.call(line, 'selectedProduct')) {
+        if (Object.prototype.hasOwnProperty.call(line, 'product')) {
           lineItems.push({
-            product_id: line.selectedProduct.id,
+            product_id: line.product.id,
             qty: line.qty,
             unit_price: line.unitPrice,
-            item_total: line.amount
+            item_total: line.amount,
+            tax_cat_id: line.tax_cat_id,
+            apply_tax: line.applyTax,
+            tax_amount: line.taxAmount
           });
         }
       });
       return lineItems;
     },
     updatePurchase: function updatePurchase(requestData) {
-      var _this5 = this;
+      var _this7 = this;
 
       __WEBPACK_IMPORTED_MODULE_4_admin_http__["a" /* default */].put("/purchases/".concat(this.voucherNo), requestData).then(function (res) {
-        _this5.$store.dispatch('spinner/setSpinner', false);
+        _this7.$store.dispatch('spinner/setSpinner', false);
 
         var message = 'Purchase Updated!';
 
-        if (_this5.orderToPurchase()) {
+        if (_this7.orderToPurchase()) {
           message = 'Conversion Successful!';
         }
 
-        _this5.showAlert('success', message);
+        _this7.showAlert('success', message);
       }).then(function () {
-        _this5.$store.dispatch('spinner/setSpinner', false);
+        _this7.$store.dispatch('spinner/setSpinner', false);
 
-        _this5.isWorking = false;
-        _this5.reset = true;
+        _this7.isWorking = false;
+        _this7.reset = true;
 
-        if (_this5.actionType === 'update' || _this5.actionType === 'draft') {
-          _this5.$router.push({
+        if (_this7.actionType === 'update' || _this7.actionType === 'draft') {
+          _this7.$router.push({
             name: 'Purchases'
           });
-        } else if (_this5.actionType === 'new_update') {
-          _this5.resetFields();
+        } else if (_this7.actionType === 'new_update') {
+          _this7.resetFields();
         }
       });
     },
     createPurchase: function createPurchase(requestData) {
-      var _this6 = this;
+      var _this8 = this;
 
       __WEBPACK_IMPORTED_MODULE_4_admin_http__["a" /* default */].post('/purchases', requestData).then(function (res) {
-        _this6.$store.dispatch('spinner/setSpinner', false);
+        _this8.$store.dispatch('spinner/setSpinner', false);
 
-        _this6.showAlert('success', _this6.page_title + ' Created!');
+        _this8.showAlert('success', _this8.page_title + ' Created!');
       }).catch(function (error) {
-        _this6.$store.dispatch('spinner/setSpinner', false);
+        _this8.$store.dispatch('spinner/setSpinner', false);
 
         throw error;
       }).then(function () {
-        if (_this6.actionType === 'save' || _this6.actionType === 'draft') {
-          _this6.$router.push({
+        if (_this8.actionType === 'save' || _this8.actionType === 'draft') {
+          _this8.$router.push({
             name: 'Purchases'
           });
-        } else if (_this6.actionType === 'new_create') {
-          _this6.resetFields();
+        } else if (_this8.actionType === 'new_create') {
+          _this8.resetFields();
         }
       });
     },
@@ -21977,7 +22113,8 @@ function _objectSpread(target) { for (var i = 1; i < arguments.length; i++) { va
         type: 'purchase',
         status: trn_status,
         purchase_order: this.purchase_order,
-        convert: this.$route.query.convert
+        convert: this.$route.query.convert,
+        tax_rate: this.taxRate
       };
 
       if (this.editMode) {
@@ -22001,11 +22138,11 @@ function _objectSpread(target) { for (var i = 1; i < arguments.length; i++) { va
         this.form_errors.push('Due Date is required.');
       }
 
-      if (!this.finalTotalAmount) {
+      if (!this.totalAmount) {
         this.form_errors.push('Total amount can\'t be zero.');
       }
 
-      if (this.noFulfillLines(this.transactionLines, 'selectedProduct')) {
+      if (this.noFulfillLines(this.transactionLines, 'product')) {
         this.form_errors.push('Please select a product.');
       }
     }
@@ -22018,6 +22155,7 @@ function _objectSpread(target) { for (var i = 1; i < arguments.length; i++) { va
 
 "use strict";
 /* harmony import */ var __WEBPACK_IMPORTED_MODULE_0_admin_components_select_MultiSelect_vue__ = __webpack_require__(2);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_1_vuex__ = __webpack_require__(5);
 //
 //
 //
@@ -22045,6 +22183,10 @@ function _objectSpread(target) { for (var i = 1; i < arguments.length; i++) { va
 //
 //
 //
+//
+//
+//
+
 
 /* harmony default export */ __webpack_exports__["a"] = ({
   name: 'PurchaseRow',
@@ -22058,15 +22200,38 @@ function _objectSpread(target) { for (var i = 1; i < arguments.length; i++) { va
     line: {
       type: Object,
       default: function _default() {}
+    },
+    taxSummary: {
+      type: Array,
+      default: function _default() {
+        return [];
+      }
     }
   },
   components: {
     MultiSelect: __WEBPACK_IMPORTED_MODULE_0_admin_components_select_MultiSelect_vue__["a" /* default */]
   },
+  computed: Object(__WEBPACK_IMPORTED_MODULE_1_vuex__["b" /* mapState */])({
+    taxRateID: function taxRateID(state) {
+      return state.sales.taxRateID;
+    },
+    invoiceTotalAmount: function invoiceTotalAmount(state) {
+      return state.sales.invoiceTotalAmount;
+    }
+  }),
   created: function created() {
     // check if editing
     if (this.$route.params.id) {
       this.prepareRowEdit(this.line);
+    }
+  },
+  watch: {
+    taxRateID: function taxRateID(newData) {
+      this.calculateAmount();
+      console.log(newData);
+    },
+    invoiceTotalAmount: function invoiceTotalAmount() {
+      this.calculateAmount();
     }
   },
   methods: {
@@ -22082,9 +22247,18 @@ function _objectSpread(target) { for (var i = 1; i < arguments.length; i++) { va
       this.line.qty = 1;
 
       if (this.$route.params.id) {
-        this.line.unitPrice = this.line.selectedProduct.cost_price;
+        this.line.unitPrice = parseFloat(this.line.selectedProduct.cost_price);
       } else {
-        this.line.unitPrice = this.line.selectedProduct.unitPrice;
+        this.line.unitPrice = parseFloat(this.line.selectedProduct.unitPrice);
+        this.line.applyTax = true;
+      }
+
+      this.line.qty = 1;
+      this.line.taxCatID = this.line.selectedProduct.tax_cat_id;
+      this.line.product_type_name = this.line.selectedProduct.product_type_name;
+
+      if (this.line.taxCatID) {
+        this.line.applyTax = true;
       }
 
       this.calculateAmount();
@@ -22102,12 +22276,48 @@ function _objectSpread(target) { for (var i = 1; i < arguments.length; i++) { va
 
       return parseInt(this.line.qty) * parseFloat(this.line.unitPrice);
     },
+    getTaxRate: function getTaxRate() {
+      var _this = this;
+
+      /**
+       * |-------------------------------------------------------------------------
+       * * taxSummary: ( props ) The tax summary result from database
+       * * tax: Every item in taxSummary ( loop )
+       * * this.line: Think it is as `product` in every row
+       * * taxRateID: Selected value from `Tax Rate Dropdown` dropdown
+       * |-------------------------------------------------------------------------
+       */
+      var taxInfo = this.taxSummary.find(function (tax) {
+        if (tax.sales_tax_category_id === _this.line.taxCatID && tax.tax_rate_id === _this.taxRateID) {
+          return tax;
+        }
+      });
+      this.taxRate = 0;
+
+      if (taxInfo) {
+        this.taxRate = parseFloat(taxInfo.tax_rate);
+      }
+
+      this.line.taxRate = this.taxRate;
+    },
+    calculateTax: function calculateTax() {
+      var amount = this.getAmount();
+      if (!amount) return;
+      var taxAmount = amount * this.taxRate / 100;
+      this.line.taxAmount = 0; // If tax checkbox is checked
+
+      if (this.line.applyTax) {
+        this.line.taxAmount = taxAmount.toFixed(2);
+      }
+    },
     calculateAmount: function calculateAmount() {
       var amount = this.getAmount();
       if (!amount) return;
       this.line.amount = amount.toFixed(2); // Send amount to parent for total calculation
 
       this.$root.$emit('total-updated', this.line.amount);
+      this.getTaxRate();
+      this.calculateTax();
       this.$forceUpdate(); // why? should use computed? or vue.set()?
     },
     removeRow: function removeRow() {
@@ -50719,7 +50929,7 @@ if (false) {
 "use strict";
 /* harmony import */ var __WEBPACK_IMPORTED_MODULE_0__babel_loader_node_modules_vue_loader_lib_selector_type_script_index_0_PurchaseCreate_vue__ = __webpack_require__(151);
 /* unused harmony namespace reexport */
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_1__node_modules_vue_loader_lib_template_compiler_index_id_data_v_310262f6_hasScoped_false_buble_transforms_node_modules_vue_loader_lib_selector_type_template_index_0_PurchaseCreate_vue__ = __webpack_require__(372);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_1__node_modules_vue_loader_lib_template_compiler_index_id_data_v_310262f6_hasScoped_true_buble_transforms_node_modules_vue_loader_lib_selector_type_template_index_0_PurchaseCreate_vue__ = __webpack_require__(372);
 var disposed = false
 function injectStyle (ssrContext) {
   if (disposed) return
@@ -50736,12 +50946,12 @@ var __vue_template_functional__ = false
 /* styles */
 var __vue_styles__ = injectStyle
 /* scopeId */
-var __vue_scopeId__ = null
+var __vue_scopeId__ = "data-v-310262f6"
 /* moduleIdentifier (server only) */
 var __vue_module_identifier__ = null
 var Component = normalizeComponent(
   __WEBPACK_IMPORTED_MODULE_0__babel_loader_node_modules_vue_loader_lib_selector_type_script_index_0_PurchaseCreate_vue__["a" /* default */],
-  __WEBPACK_IMPORTED_MODULE_1__node_modules_vue_loader_lib_template_compiler_index_id_data_v_310262f6_hasScoped_false_buble_transforms_node_modules_vue_loader_lib_selector_type_template_index_0_PurchaseCreate_vue__["a" /* default */],
+  __WEBPACK_IMPORTED_MODULE_1__node_modules_vue_loader_lib_template_compiler_index_id_data_v_310262f6_hasScoped_true_buble_transforms_node_modules_vue_loader_lib_selector_type_template_index_0_PurchaseCreate_vue__["a" /* default */],
   __vue_template_functional__,
   __vue_styles__,
   __vue_scopeId__,
@@ -50963,6 +51173,49 @@ var render = function() {
         })
       ]
     ),
+    _vm._v(" "),
+    _c("td", { staticClass: "col--tax", attrs: { "data-colname": "Tax" } }, [
+      _c("input", {
+        directives: [
+          {
+            name: "model",
+            rawName: "v-model",
+            value: _vm.line.applyTax,
+            expression: "line.applyTax"
+          }
+        ],
+        staticClass: "wperp-form-field",
+        attrs: { type: "checkbox" },
+        domProps: {
+          checked: Array.isArray(_vm.line.applyTax)
+            ? _vm._i(_vm.line.applyTax, null) > -1
+            : _vm.line.applyTax
+        },
+        on: {
+          change: function($event) {
+            var $$a = _vm.line.applyTax,
+              $$el = $event.target,
+              $$c = $$el.checked ? true : false
+            if (Array.isArray($$a)) {
+              var $$v = null,
+                $$i = _vm._i($$a, $$v)
+              if ($$el.checked) {
+                $$i < 0 && _vm.$set(_vm.line, "applyTax", $$a.concat([$$v]))
+              } else {
+                $$i > -1 &&
+                  _vm.$set(
+                    _vm.line,
+                    "applyTax",
+                    $$a.slice(0, $$i).concat($$a.slice($$i + 1))
+                  )
+              }
+            } else {
+              _vm.$set(_vm.line, "applyTax", $$c)
+            }
+          }
+        }
+      })
+    ]),
     _vm._v(" "),
     _c(
       "td",
@@ -51281,6 +51534,10 @@ var render = function() {
                     _vm._v(_vm._s(_vm.__("Amount", "erp")))
                   ]),
                   _vm._v(" "),
+                  _c("th", { attrs: { scope: "col" } }, [
+                    _vm._v(_vm._s(_vm.__("Tax", "erp")))
+                  ]),
+                  _vm._v(" "),
                   _c("th", { attrs: { scope: "col" } })
                 ])
               ]),
@@ -51289,10 +51546,225 @@ var render = function() {
                 "tbody",
                 [
                   _vm._l(_vm.transactionLines, function(line, index) {
-                    return _c("purchase-row", {
-                      key: index,
-                      attrs: { line: line, products: _vm.products }
-                    })
+                    return _c("tr", [
+                      _c(
+                        "th",
+                        {
+                          staticClass:
+                            "col--check with-multiselect column-primary product-select",
+                          attrs: { scope: "row" }
+                        },
+                        [
+                          _c("multi-select", {
+                            attrs: { options: _vm.products },
+                            on: {
+                              input: function($event) {
+                                return _vm.setLineData(line)
+                              }
+                            },
+                            model: {
+                              value: line.product,
+                              callback: function($$v) {
+                                _vm.$set(line, "product", $$v)
+                              },
+                              expression: "line.product"
+                            }
+                          })
+                        ],
+                        1
+                      ),
+                      _vm._v(" "),
+                      _c("td", { staticClass: "col--qty" }, [
+                        _c("input", {
+                          directives: [
+                            {
+                              name: "model",
+                              rawName: "v-model",
+                              value: line.quantity,
+                              expression: "line.quantity"
+                            }
+                          ],
+                          staticClass: "wperp-form-field",
+                          attrs: {
+                            min: "0",
+                            type: "number",
+                            name: "qty",
+                            required: !!line.product
+                          },
+                          domProps: { value: line.quantity },
+                          on: {
+                            keyup: function($event) {
+                              return _vm.lineUpdate(index)
+                            },
+                            input: function($event) {
+                              if ($event.target.composing) {
+                                return
+                              }
+                              _vm.$set(line, "quantity", $event.target.value)
+                            }
+                          }
+                        })
+                      ]),
+                      _vm._v(" "),
+                      _c(
+                        "td",
+                        {
+                          staticClass: "col--uni_price",
+                          attrs: { "data-colname": "Unit Price" }
+                        },
+                        [
+                          _c("input", {
+                            directives: [
+                              {
+                                name: "model",
+                                rawName: "v-model",
+                                value: line.unitPrice,
+                                expression: "line.unitPrice"
+                              }
+                            ],
+                            staticClass: "wperp-form-field text-right",
+                            attrs: {
+                              min: "0",
+                              type: "number",
+                              step: "0.01",
+                              required: !!line.product
+                            },
+                            domProps: { value: line.unitPrice },
+                            on: {
+                              keyup: function($event) {
+                                return _vm.lineUpdate(index)
+                              },
+                              input: function($event) {
+                                if ($event.target.composing) {
+                                  return
+                                }
+                                _vm.$set(line, "unitPrice", $event.target.value)
+                              }
+                            }
+                          })
+                        ]
+                      ),
+                      _vm._v(" "),
+                      _c(
+                        "td",
+                        {
+                          staticClass: "col--amount",
+                          attrs: { "data-colname": "Amount" }
+                        },
+                        [
+                          _c("input", {
+                            directives: [
+                              {
+                                name: "model",
+                                rawName: "v-model",
+                                value: line.amount,
+                                expression: "line.amount"
+                              }
+                            ],
+                            staticClass: "wperp-form-field text-right",
+                            attrs: {
+                              type: "number",
+                              min: "0",
+                              step: "0.01",
+                              readonly: ""
+                            },
+                            domProps: { value: line.amount },
+                            on: {
+                              input: function($event) {
+                                if ($event.target.composing) {
+                                  return
+                                }
+                                _vm.$set(line, "amount", $event.target.value)
+                              }
+                            }
+                          })
+                        ]
+                      ),
+                      _vm._v(" "),
+                      _c(
+                        "td",
+                        {
+                          staticClass: "col--tax",
+                          attrs: { "data-colname": "Tax" }
+                        },
+                        [
+                          _c("input", {
+                            directives: [
+                              {
+                                name: "model",
+                                rawName: "v-model",
+                                value: line.applyTax,
+                                expression: "line.applyTax"
+                              }
+                            ],
+                            staticClass: "wperp-form-field",
+                            attrs: { type: "checkbox" },
+                            domProps: {
+                              checked: Array.isArray(line.applyTax)
+                                ? _vm._i(line.applyTax, null) > -1
+                                : line.applyTax
+                            },
+                            on: {
+                              change: [
+                                function($event) {
+                                  var $$a = line.applyTax,
+                                    $$el = $event.target,
+                                    $$c = $$el.checked ? true : false
+                                  if (Array.isArray($$a)) {
+                                    var $$v = null,
+                                      $$i = _vm._i($$a, $$v)
+                                    if ($$el.checked) {
+                                      $$i < 0 &&
+                                        _vm.$set(
+                                          line,
+                                          "applyTax",
+                                          $$a.concat([$$v])
+                                        )
+                                    } else {
+                                      $$i > -1 &&
+                                        _vm.$set(
+                                          line,
+                                          "applyTax",
+                                          $$a
+                                            .slice(0, $$i)
+                                            .concat($$a.slice($$i + 1))
+                                        )
+                                    }
+                                  } else {
+                                    _vm.$set(line, "applyTax", $$c)
+                                  }
+                                },
+                                function($event) {
+                                  return _vm.disableLineTax(index)
+                                }
+                              ]
+                            }
+                          })
+                        ]
+                      ),
+                      _vm._v(" "),
+                      _c(
+                        "td",
+                        {
+                          staticClass: "col--actions delete-row",
+                          attrs: { "data-colname": "Action" }
+                        },
+                        [
+                          _c(
+                            "span",
+                            {
+                              staticClass: "wperp-btn",
+                              on: {
+                                click: function($event) {
+                                  return _vm.removeRow(index)
+                                }
+                              }
+                            },
+                            [_c("i", { staticClass: "flaticon-trash" })]
+                          )
+                        ]
+                      )
+                    ])
                   }),
                   _vm._v(" "),
                   _c("tr", { staticClass: "add-new-line" }, [
@@ -51329,6 +51801,43 @@ var render = function() {
                     )
                   ]),
                   _vm._v(" "),
+                  _c("tr", { staticClass: "tax-rate-row" }, [
+                    _c(
+                      "td",
+                      {
+                        staticClass: "text-right with-multiselect",
+                        attrs: { colspan: "3" }
+                      },
+                      [
+                        _c("multi-select", {
+                          staticClass: "tax-rates",
+                          attrs: {
+                            options: _vm.taxZones,
+                            placeholder: _vm.__("Select sales tax", "erp")
+                          },
+                          model: {
+                            value: _vm.taxRate,
+                            callback: function($$v) {
+                              _vm.taxRate = $$v
+                            },
+                            expression: "taxRate"
+                          }
+                        })
+                      ],
+                      1
+                    ),
+                    _vm._v(" "),
+                    _c("td", [
+                      _c("input", {
+                        staticClass: "wperp-form-field",
+                        attrs: { type: "text", readonly: "" },
+                        domProps: { value: _vm.moneyFormat(_vm.taxTotalAmount) }
+                      })
+                    ]),
+                    _vm._v(" "),
+                    _c("td")
+                  ]),
+                  _vm._v(" "),
                   _c("tr", { staticClass: "total-amount-row" }, [
                     _c(
                       "td",
@@ -51346,19 +51855,19 @@ var render = function() {
                           {
                             name: "model",
                             rawName: "v-model",
-                            value: _vm.finalTotalAmount,
-                            expression: "finalTotalAmount"
+                            value: _vm.totalAmount,
+                            expression: "totalAmount"
                           }
                         ],
                         staticClass: "wperp-form-field text-right",
                         attrs: { type: "text", readonly: "" },
-                        domProps: { value: _vm.finalTotalAmount },
+                        domProps: { value: _vm.totalAmount },
                         on: {
                           input: function($event) {
                             if ($event.target.composing) {
                               return
                             }
-                            _vm.finalTotalAmount = $event.target.value
+                            _vm.totalAmount = $event.target.value
                           }
                         }
                       })

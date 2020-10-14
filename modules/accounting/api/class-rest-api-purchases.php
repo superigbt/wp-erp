@@ -249,11 +249,13 @@ class Purchases_Controller extends \WeDevs\ERP\API\REST_Controller {
 
         $items      = $request['line_items'];
         $item_total = [];
-
+        $item_tax_total = [];
         foreach ( $items as $key => $item ) {
-            $item_total[ $key ] = $item['item_total'];
+            $item_total[ $key ]      = $item['item_total'];
+            $item_tax_total[ $key ]  = $item['tax_amount'];
         }
 
+        $purchase_data['tax']            = array_sum( $item_tax_total );
         $purchase_data['amount']        = array_sum( $item_total );
         $purchase_data['attachments']   = maybe_serialize( $request['attachments'] );
         $additional_fields['namespace'] = $this->namespace;
@@ -399,6 +401,9 @@ class Purchases_Controller extends \WeDevs\ERP\API\REST_Controller {
         }
         if ( isset( $request['line_items'] ) ) {
             $prepared_item['line_items'] = $request['line_items'];
+        }
+        if ( isset( $request['tax_rate'] ) ) {
+            $prepared_item['tax_rate'] = $request['tax_rate'];
         }
         if ( isset( $request['attachments'] ) ) {
             $prepared_item['attachments'] = maybe_serialize( $request['attachments'] );

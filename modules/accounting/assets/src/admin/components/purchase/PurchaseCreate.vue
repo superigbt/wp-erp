@@ -58,16 +58,45 @@
                             <th scope="col">{{ __('Qty', 'erp') }}</th>
                             <th scope="col">{{ __('Unit Price', 'erp') }}</th>
                             <th scope="col">{{ __('Amount', 'erp') }}</th>
+                            <th scope="col">{{ __('Tax', 'erp') }}</th>
                             <th scope="col"></th>
                         </tr>
                         </thead>
                         <tbody>
-                        <purchase-row
+                        <!--<purchase-row
                             :line="line"
                             :products="products"
                             :key="index"
                             v-for="(line, index) in transactionLines"
-                        ></purchase-row>
+                        ></purchase-row>-->
+                        <tr  v-for="(line, index) in transactionLines">
+                            <th scope="row" class="col--check with-multiselect column-primary product-select">
+                                <multi-select v-model="line.product" :options="products" @input="setLineData(line)" />
+                            </th>
+                            <td class="col--qty">
+                                <input min="0" type="number"
+                                       v-model="line.quantity"
+                                       @keyup="lineUpdate(index)"
+                                       name="qty"
+                                       class="wperp-form-field" :required="!!line.product">
+                            </td>
+                            <td class="col--uni_price" data-colname="Unit Price">
+                                <input min="0" type="number" v-model="line.unitPrice"
+                                       @keyup="lineUpdate(index)"
+                                       step="0.01"
+                                       class="wperp-form-field text-right" :required="!!line.product">
+                            </td>
+                            <td class="col--amount" data-colname="Amount">
+                                <input type="number" min="0" step="0.01" v-model="line.amount" class="wperp-form-field text-right" readonly>
+                            </td>
+                            <td class="col--tax" data-colname="Tax">
+                                <input type="checkbox"  @change="disableLineTax(index)" v-model="line.applyTax"  class="wperp-form-field">
+
+                            </td>
+                            <td class="col--actions delete-row" data-colname="Action">
+                                <span class="wperp-btn" @click="removeRow(index)"><i class="flaticon-trash"></i></span>
+                            </td>
+                        </tr>
                         <tr class="add-new-line">
                             <td colspan="9" style="text-align: left;">
                                 <button @click.prevent="addLine" class="wperp-btn btn--primary add-line-trigger">
@@ -76,11 +105,22 @@
                             </td>
                         </tr>
 
+                        <tr class="tax-rate-row">
+                            <td colspan="3" class="text-right with-multiselect">
+                                <multi-select v-model="taxRate"
+                                              :options="taxZones"
+                                              class="tax-rates"
+                                              :placeholder="__('Select sales tax', 'erp')" />
+                            </td>
+                            <td><input type="text" class="wperp-form-field" :value="moneyFormat(taxTotalAmount)" readonly></td>
+                            <td></td>
+                        </tr>
+
                         <tr class="total-amount-row">
                             <td colspan="3" class="text-right">
                                 <span>{{ __('Total Amount', 'erp') }} = </span>
                             </td>
-                            <td><input type="text" v-model="finalTotalAmount" class="wperp-form-field text-right" readonly></td>
+                            <td><input type="text"  v-model="totalAmount" class="wperp-form-field text-right" readonly></td>
                             <td></td>
                         </tr>
 
@@ -141,6 +181,7 @@ import ComboButton from 'admin/components/select/ComboButton.vue';
 import PurchaseRow from 'admin/components/purchase/PurchaseRow.vue';
 import SelectVendors from 'admin/components/people/SelectVendors.vue';
 import ShowErrors from 'admin/components/base/ShowErrors.vue';
+import MultiSelect from 'admin/components/select/MultiSelect.vue';
 
 export default {
     name: 'PurchaseCreate',
@@ -151,7 +192,8 @@ export default {
         ComboButton,
         PurchaseRow,
         SelectVendors,
-        ShowErrors
+        ShowErrors,
+        MultiSelect
     },
 
     data() {
@@ -190,7 +232,9 @@ export default {
             isWorking       : false,
             purchase_title  : '',
             purchase_order  : 0,
-            page_title      : ''
+            page_title      : '',
+            taxRates        : [],
+            taxRate         : ''
         };
     },
 
@@ -203,7 +247,50 @@ export default {
     },
 
     computed: {
-        ...mapState({ actionType: state => state.combo.btnID })
+        ...mapState({ actionType: state => state.combo.btnID }),
+        totalAmount(){
+            let total = 0
+            this.transactionLines.forEach(item => {
+                if(item.product && item.quantity && item.unitPrice){
+                    total += parseInt(item.quantity) * parseFloat( item.unitPrice )
+                }
+            })
+            return total + this.taxTotalAmount;
+        },
+
+        taxTotalAmount(){
+            if(!this.taxRate) return 0 ;
+            let rates = this.taxRates.filter(item => {
+                return this.taxRate.id == item.tax_rate_id
+            })
+            let totalTax = 0
+            this.transactionLines.map(item => {
+                if(item.product && item.quantity && item.unitPrice ){
+                   if(item.applyTax && item.tax_cat_id && rates.length) {
+                       let taxRate =  rates.filter( r =>  r.sales_tax_category_id ==  item.tax_cat_id)
+                        taxRate = taxRate.length ? taxRate[0].tax_rate : 0
+                        item.taxAmount  =  ((item.quantity * item.unitPrice) * taxRate) / 100;
+                        totalTax += item.taxAmount
+                   }
+                }
+            })
+        return totalTax ;
+        },
+        taxZones(){
+            let zones = []
+            let id = ''
+            this.taxRates.forEach( item => {
+                zones[item.tax_zone_id] = {
+                    id                    : item.tax_rate_id,
+                    name                  : item.tax_rate_name,
+                    tax_rate              : item.tax_rate,
+                    agency_id             : item.agency_id,
+                    tax_cat_id            : item.sales_tax_category_id,
+                }
+            })
+
+            return zones;
+        }
     },
 
     created() {
@@ -239,7 +326,37 @@ export default {
     },
 
     methods: {
+        setLineData(line){
+            line.quantity  = 1
+            if (this.$route.params.id) {
+                line.unitPrice = parseFloat(line.product.cost_price);
+            } else {
+                line.unitPrice = parseFloat(line.product.unitPrice);
+            }
 
+            line.amount =  line.quantity * line.unitPrice
+            line.tax_cat_id = line.product.tax_cat_id
+            if(parseInt(line.product.tax_cat_id)){
+                line.applyTax = true
+                line.taxAmount = 0
+            }
+           // this.$forceUpdate();
+        },
+        lineUpdate(index){
+
+            let line = this.transactionLines[index]
+            line.amount =  parseInt(line.quantity) * parseFloat( line.unitPrice )
+            this.$set(this.transactionLines, index, line)
+
+        },
+        disableLineTax(index){
+            let line = this.transactionLines[index]
+            line.taxAmount = !line.applyTax ? 0 : line.taxAmount
+            this.$set(this.transactionLines, index, line)
+        },
+        removeRow(index){
+            this.transactionLines.splice(index, 1) ;
+        },
         async prepareDataLoad() {
             /**
                  * ----------------------------------------------
@@ -332,11 +449,15 @@ export default {
             }).then((response) => {
                 response.data.forEach(element => {
                     this.products.push({
-                        id       : element.id,
-                        name     : element.name,
-                        unitPrice: element.cost_price
+                        id               : element.id,
+                        name             : element.name,
+                        unitPrice        : element.cost_price,
+                        tax_cat_id       : parseInt(element.tax_cat_id) || null,
+                        product_type_name: element.product_type_name
                     });
                 });
+
+                this.getTaxRates();
 
                 this.$store.dispatch('spinner/setSpinner', false);
             }).catch(error => {
@@ -344,7 +465,11 @@ export default {
                 throw error;
             });
         },
-
+        getTaxRates(){
+            HTTP.get('/taxes/summary').then((response) => {
+                this.taxRates = response.data
+            })
+        },
         getvendorData() {
             const vendor_id = this.basic_fields.vendor.id;
 
@@ -397,12 +522,15 @@ export default {
             var lineItems = [];
 
             this.transactionLines.forEach(line => {
-                if (Object.prototype.hasOwnProperty.call(line, 'selectedProduct')) {
+                if (Object.prototype.hasOwnProperty.call(line, 'product')) {
                     lineItems.push({
-                        product_id: line.selectedProduct.id,
+                        product_id: line.product.id,
                         qty       : line.qty,
                         unit_price: line.unitPrice,
-                        item_total: line.amount
+                        item_total: line.amount,
+                        tax_cat_id: line.tax_cat_id,
+                        apply_tax: line.applyTax,
+                        tax_amount: line.taxAmount,
                     });
                 }
             });
@@ -484,7 +612,8 @@ export default {
                 type           : 'purchase',
                 status         : trn_status,
                 purchase_order : this.purchase_order,
-                convert        : this.$route.query.convert
+                convert        : this.$route.query.convert,
+                tax_rate       : this.taxRate
             };
 
             if (this.editMode) {
@@ -509,11 +638,11 @@ export default {
                 this.form_errors.push('Due Date is required.');
             }
 
-            if (!this.finalTotalAmount) {
+            if (!this.totalAmount) {
                 this.form_errors.push('Total amount can\'t be zero.');
             }
 
-            if (this.noFulfillLines(this.transactionLines, 'selectedProduct')) {
+            if (this.noFulfillLines(this.transactionLines, 'product')) {
                 this.form_errors.push('Please select a product.');
             }
         }
@@ -522,7 +651,7 @@ export default {
 };
 </script>
 
-<style lang="less">
+<style lang="less" scoped>
     .purchase-create {
         .dropdown {
             width: 100%;
@@ -545,4 +674,15 @@ export default {
             width: 200px;
         }
     }
+
+    .wperp-form-table {
+        .col--tax {
+            input {
+                width: initial;
+                padding: 0 !important;
+                border-color: rgba(26, 158, 212, 0.45);
+            }
+        }
+    }
+
 </style>

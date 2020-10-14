@@ -116,6 +116,19 @@ function erp_acct_insert_product( $data ) {
         $wpdb->query( 'START TRANSACTION' );
         $product_data = erp_acct_get_formatted_product_data( $data );
 
+
+         $product_check =  $wpdb->get_row(
+            $wpdb->prepare(
+                "SELECT * FROM {$wpdb->prefix}erp_acct_products where name = %s",
+                $product_data['name']
+            ),
+            OBJECT
+        );
+
+         if($product_check){
+             throw new \Exception("Product Duplicate problem") ;
+         }
+
         $wpdb->insert(
             $wpdb->prefix . 'erp_acct_products',
             array(
@@ -137,12 +150,12 @@ function erp_acct_insert_product( $data ) {
 
         $wpdb->query( 'COMMIT' );
 
-    } catch ( Exception $e ) {
+    } catch ( \Exception $e ) {
         $wpdb->query( 'ROLLBACK' );
-        return new WP_error( 'product-exception', $e->getMessage() );
+        return  wp_send_json(  $e->getMessage(), 400 );
     }
 
-    return erp_acct_get_product( $product_id );
+    return   $product_id ;
 
 }
 

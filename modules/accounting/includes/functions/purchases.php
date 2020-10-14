@@ -178,6 +178,7 @@ function erp_acct_insert_purchase( $data ) {
 				'trn_date'        => $purchase_data['trn_date'],
 				'due_date'        => $purchase_data['due_date'],
 				'amount'          => $purchase_data['amount'],
+				'tax'             => $purchase_data['tax'],
 				'ref'             => $purchase_data['ref'],
 				'status'          => $purchase_data['status'],
 				'purchase_order'  => $purchase_data['purchase_order'],
@@ -198,12 +199,32 @@ function erp_acct_insert_purchase( $data ) {
                 'product_id' => $item['product_id'],
                 'qty'        => $item['qty'],
                 'price'      => $item['unit_price'],
+                'tax'        => $item['tax_amount'],
                 'amount'     => $item['item_total'],
                 'created_at' => $purchase_data['created_at'],
                 'created_by' => $created_by,
                 'updated_at' => $purchase_data['updated_at'],
                 'updated_by' => $purchase_data['updated_by']
             ) );
+
+            $details_id = $wpdb->insert_id;
+
+            if(isset($purchase_data['tax_rate']) && isset($purchase_data['tax_rate']['agency_id'])){
+
+                $tax_rate_agency = get_purchase_tax_rate_with_agency( $purchase_data['tax_rate']['id'], $item['tax_cat_id'] );
+
+                $wpdb->insert(
+                    $wpdb->prefix . 'erp_acct_purchase_details_tax',
+                    [
+                        'invoice_details_id' => $details_id,
+                        'agency_id'          => isset($purchase_data['tax_rate']['agency_id']) ? $purchase_data['tax_rate']['agency_id'] : null,
+                        'tax_rate'           => $tax_rate_agency->tax_rate ,
+                        'updated_at'         => $purchase_data['updated_at'],
+                        'updated_by'         => $purchase_data['updated_by']
+                    ]
+                );
+
+            }
         }
 
         do_action( 'erp_acct_after_purchase_create', $data, $voucher_no );
@@ -255,6 +276,27 @@ function erp_acct_insert_purchase( $data ) {
 
     return $purchase;
 }
+
+
+
+
+/**
+ * Tax category with agency
+ */
+function get_purchase_tax_rate_with_agency( $tax_id, $tax_cat_id ) {
+    global $wpdb;
+
+    return $wpdb->get_row(
+        $wpdb->prepare(
+            "SELECT agency_id, tax_rate FROM {$wpdb->prefix}erp_acct_tax_cat_agency where tax_id = %d and tax_cat_id = %d",
+            absint( $tax_id ),
+            absint( $tax_cat_id )
+        ),
+        OBJECT
+    );
+}
+
+
 
 /**
  * Update a purchase
@@ -578,6 +620,8 @@ function erp_acct_get_formatted_purchase_data( $data, $voucher_no ) {
     $purchase_data['trn_date']        = isset( $data['trn_date'] ) ? $data['trn_date'] : date( 'Y-m-d' );
     $purchase_data['due_date']        = isset( $data['due_date'] ) ? $data['due_date'] : date( 'Y-m-d' );
     $purchase_data['amount']          = isset( $data['amount'] ) ? floatval( $data['amount'] ) : 0;
+    $purchase_data['tax']             = isset( $data['tax'] ) ? floatval( $data['tax'] ) : 0;
+    $purchase_data['tax_rate']        = isset( $data['tax_rate'] ) ?   $data['tax_rate']  : [];
     $purchase_data['attachments']     = isset( $data['attachments'] ) ? $data['attachments'] : '';
     $purchase_data['status']          = isset( $data['status'] ) ? intval( $data['status'] ) : '';
     $purchase_data['line_items']      = isset( $data['line_items'] ) ? $data['line_items'] : [];
