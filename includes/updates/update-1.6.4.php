@@ -86,6 +86,14 @@ function erp_acct_alter_purchase_1_6_4() {
         );
     }
 
+    if ( !in_array( 'tax_zone_id', $cols ) ) {
+        $wpdb->query(
+            $wpdb->prepare(
+                "ALTER TABLE $table ADD `tax_zone_id` integer  NULL DEFAULT NULL  AFTER `tax`;"
+            )
+        );
+    }
+
 
 }
 

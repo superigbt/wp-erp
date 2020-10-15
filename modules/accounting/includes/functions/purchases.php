@@ -52,7 +52,6 @@ function erp_acct_get_purchase( $purchase_no ) {
 
     $sql = $wpdb->prepare(
         "SELECT
-
     voucher.editable,
     purchase.id,
     purchase.voucher_no,
@@ -67,6 +66,8 @@ function erp_acct_get_purchase( $purchase_no ) {
     purchase.attachments,
     purchase.particulars,
     purchase.created_at,
+    purchase.tax,
+    purchase.tax_zone_id,
 
     purchase_acc_detail.purchase_no,
     purchase_acc_detail.debit,
@@ -102,7 +103,8 @@ function erp_acct_format_purchase_line_items( $voucher_no ) {
         purchase_detail.qty,
         purchase_detail.price,
         purchase_detail.amount,
-
+        purchase_detail.tax,
+        SUM(purchase_detail_tax.tax_rate) as tax_rate,
         product.name,
         product.product_type_id,
         product.category_id,
@@ -112,6 +114,7 @@ function erp_acct_format_purchase_line_items( $voucher_no ) {
 
         FROM {$wpdb->prefix}erp_acct_purchase AS purchase
         LEFT JOIN {$wpdb->prefix}erp_acct_purchase_details AS purchase_detail ON purchase.voucher_no = purchase_detail.trn_no
+        LEFT JOIN {$wpdb->prefix}erp_acct_purchase_details_tax as purchase_detail_tax ON purchase_detail.id = purchase_detail_tax.invoice_details_id
         LEFT JOIN {$wpdb->prefix}erp_acct_products AS product ON purchase_detail.product_id = product.id
         WHERE purchase.voucher_no = %d",
         $voucher_no
@@ -179,6 +182,7 @@ function erp_acct_insert_purchase( $data ) {
 				'due_date'        => $purchase_data['due_date'],
 				'amount'          => $purchase_data['amount'],
 				'tax'             => $purchase_data['tax'],
+				'tax_zone_id'     => isset($purchase_data['tax_rate']['id']) ? $purchase_data['tax_rate']['id'] : null,
 				'ref'             => $purchase_data['ref'],
 				'status'          => $purchase_data['status'],
 				'purchase_order'  => $purchase_data['purchase_order'],
@@ -339,6 +343,8 @@ function erp_acct_update_purchase( $purchase_data, $purchase_id ) {
 					'trn_date'       => $purchase_data['trn_date'],
 					'due_date'       => $purchase_data['due_date'],
 					'amount'         => $purchase_data['amount'],
+                    'tax'            => $purchase_data['tax'],
+                    'tax_zone_id'    => isset($purchase_data['tax_rate']['id']) ? $purchase_data['tax_rate']['id'] : null,
 					'ref'            => $purchase_data['ref'],
 					'status'         => $purchase_data['status'],
 					'purchase_order' => $purchase_data['purchase_order'],
@@ -367,6 +373,8 @@ function erp_acct_update_purchase( $purchase_data, $purchase_id ) {
 
             $wpdb->delete( $wpdb->prefix . 'erp_acct_purchase_details', [ 'trn_no' => $purchase_id ] );
 
+            $wpdb->query( "DELETE FROM {$wpdb->prefix}erp_acct_purchase_details_tax WHERE invoice_details_id IN($prev_detail_ids)" ); // delete previous tax data
+
             $items = $purchase_data['purchase_details'];
 
             foreach ( $items as $key => $item ) {
@@ -377,6 +385,7 @@ function erp_acct_update_purchase( $purchase_data, $purchase_id ) {
 						'qty'        => $item['qty'],
 						'price'      => $item['unit_price'],
 						'amount'     => $item['item_total'],
+                        'tax'        => $item['tax_amount'],
 						'created_at' => $purchase_data['created_at'],
 						'created_by' => $purchase_data['created_by'],
 						'updated_at' => $purchase_data['updated_at'],
@@ -386,6 +395,26 @@ function erp_acct_update_purchase( $purchase_data, $purchase_id ) {
 						'trn_no' => $purchase_id,
 					]
                 );
+
+                $details_id = $wpdb->insert_id;
+
+                if(isset($purchase_data['tax_rate']) && isset($purchase_data['tax_rate']['agency_id'])){
+
+                    $tax_rate_agency = get_purchase_tax_rate_with_agency( $purchase_data['tax_rate']['id'], $item['tax_cat_id'] );
+
+                    $wpdb->insert(
+                        $wpdb->prefix . 'erp_acct_purchase_details_tax',
+                        [
+                            'invoice_details_id' => $details_id,
+                            'agency_id'          => isset($purchase_data['tax_rate']['agency_id']) ? $purchase_data['tax_rate']['agency_id'] : null,
+                            'tax_rate'           => $tax_rate_agency->tax_rate ,
+                            'updated_at'         => $purchase_data['updated_at'],
+                            'updated_by'         => $purchase_data['updated_by']
+                        ]
+                    );
+
+                }
+
             }
 
             $wpdb->query( 'COMMIT' );

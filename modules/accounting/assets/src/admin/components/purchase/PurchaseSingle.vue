@@ -105,8 +105,9 @@
                             <tr>
                                 <td colspan="7">
                                     <ul>
-                                        <li><span>{{ __('Subtotal', 'erp') }}:</span> {{ moneyFormat(purchase.amount) }}</li>
-                                        <li><span>{{ __('Total', 'erp') }}:</span> {{ moneyFormat(purchase.amount) }}</li>
+                                        <li><span>{{ __('Subtotal', 'erp') }}:</span> {{ moneyFormat(total.basic) }}</li>
+                                        <li v-if="total.tax"><span>{{ __('Tax', 'erp') }}:</span> {{ moneyFormat(total.tax) }}</li>
+                                        <li><span>{{ __('Total', 'erp') }}:</span> {{ moneyFormat(total.final) }}</li>
                                     </ul>
                                 </td>
                             </tr>
@@ -173,7 +174,15 @@ export default {
             this.showModal = false;
         });
     },
-
+    computed:{
+      total(){
+          return {
+              basic:  parseFloat( this.purchase.amount ) ,
+              tax:  parseFloat( this.purchase.tax ) ,
+              final:  parseFloat( this.purchase.amount ) + parseFloat( this.purchase.tax )
+          }
+      }
+    },
     methods: {
         getCompanyInfo() {
             HTTP.get(`/company`).then(response => {

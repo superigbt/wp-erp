@@ -75,7 +75,7 @@
                             </th>
                             <td class="col--qty">
                                 <input min="0" type="number"
-                                       v-model="line.quantity"
+                                       v-model="line.qty"
                                        @keyup="lineUpdate(index)"
                                        name="qty"
                                        class="wperp-form-field" :required="!!line.product">
@@ -110,7 +110,7 @@
                                 <multi-select v-model="taxRate"
                                               :options="taxZones"
                                               class="tax-rates"
-                                              :placeholder="__('Select sales tax', 'erp')" />
+                                              :placeholder="__('Select Purchase Vat Zone', 'erp')" />
                             </td>
                             <td><input type="text" class="wperp-form-field" :value="moneyFormat(taxTotalAmount)" readonly></td>
                             <td></td>
@@ -243,6 +243,27 @@ export default {
             if (!this.editMode) {
                 this.getvendorData();
             }
+        },
+        products() {
+            if (this.$route.params.id) {
+                this.transactionLines.map(item => {
+                    let product = this.products.filter(p => {
+                        return p.id === item.product_id
+                    })
+                    item.product = product[0]
+                    item.applyTax = parseFloat(item.tax) > 0
+                    item.taxAmount = item.tax ? parseFloat(item.tax) : 0
+                    item.tax_rate = parseFloat(item.tax_rate)
+                    item.unitPrice = parseFloat(item.price)
+                    item.tax_cat_id = product.length ? product[0].tax_cat_id : null
+                })
+            }
+        },
+        taxRates() {
+            if (this.$route.params.id) {
+                let rate = this.taxZones.filter( item=>  parseInt(item.id) === this.taxRate )
+                this.taxRate = rate[0]
+            }
         }
     },
 
@@ -251,8 +272,8 @@ export default {
         totalAmount(){
             let total = 0
             this.transactionLines.forEach(item => {
-                if(item.product && item.quantity && item.unitPrice){
-                    total += parseInt(item.quantity) * parseFloat( item.unitPrice )
+                if(item.qty && item.unitPrice){
+                    total += parseInt(item.qty) * parseFloat( item.unitPrice )
                 }
             })
             return total + this.taxTotalAmount;
@@ -265,11 +286,12 @@ export default {
             })
             let totalTax = 0
             this.transactionLines.map(item => {
-                if(item.product && item.quantity && item.unitPrice ){
+                if(item.product && item.qty && item.unitPrice ){
                    if(item.applyTax && item.tax_cat_id && rates.length) {
                        let taxRate =  rates.filter( r =>  r.sales_tax_category_id ==  item.tax_cat_id)
                         taxRate = taxRate.length ? taxRate[0].tax_rate : 0
-                        item.taxAmount  =  ((item.quantity * item.unitPrice) * taxRate) / 100;
+                        item.taxAmount  =  ((item.qty * item.unitPrice) * taxRate) / 100;
+                        item.tax_rate  =  taxRate;
                         totalTax += item.taxAmount
                    }
                 }
@@ -309,32 +331,20 @@ export default {
 
         this.prepareDataLoad();
 
-        this.$root.$on('remove-row', index => {
-            if (this.transactionLines.length < 2) {
-                return;
-            }
-            this.$delete(this.transactionLines, index);
-            this.updateFinalAmount();
-        });
 
-        this.$root.$on('total-updated', amount => {
-            this.updateFinalAmount();
-        });
 
-        // initialize combo button id with `update`
-        this.$store.dispatch('combo/setBtnID', 'update');
     },
 
     methods: {
         setLineData(line){
-            line.quantity  = 1
+            line.qty  = 1
             if (this.$route.params.id) {
                 line.unitPrice = parseFloat(line.product.cost_price);
             } else {
                 line.unitPrice = parseFloat(line.product.unitPrice);
             }
 
-            line.amount =  line.quantity * line.unitPrice
+            line.amount =  line.qty * line.unitPrice
             line.tax_cat_id = line.product.tax_cat_id
             if(parseInt(line.product.tax_cat_id)){
                 line.applyTax = true
@@ -345,7 +355,7 @@ export default {
         lineUpdate(index){
 
             let line = this.transactionLines[index]
-            line.amount =  parseInt(line.quantity) * parseFloat( line.unitPrice )
+            line.amount =  parseInt(line.qty) * parseFloat( line.unitPrice )
             this.$set(this.transactionLines, index, line)
 
         },
@@ -411,8 +421,19 @@ export default {
             this.basic_fields.due_date        = purchase.due_date;
             this.status                       = purchase.status;
             this.transactionLines             = purchase.line_items;
+            this.transactionLines.map( item => {
+                let product =  this.products.filter( p => { return p.id == item.product_id})
+                item.product = product[0]
+                item.applyTax = parseFloat(item.tax) > 0
+                item.taxAmount = item.tax ? parseFloat(item.tax) : 0
+                item.tax_rate =  parseFloat(item.tax_rate)
+                item.unitPrice = parseFloat(item.price)
+                item.tax_cat_id = product.length ? product[0].tax_cat_id : null
+            })
+
             this.particulars                  = purchase.particulars;
             this.attachments                  = purchase.attachments;
+            this.taxRate = parseInt(purchase.tax_zone_id)    // for set is temporary. when taz zone loaded then set tax rate object
         },
 
         resetData() {

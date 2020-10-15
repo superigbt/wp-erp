@@ -21711,6 +21711,34 @@ function _objectSpread(target) { for (var i = 1; i < arguments.length; i++) { va
       if (!this.editMode) {
         this.getvendorData();
       }
+    },
+    products: function products() {
+      var _this = this;
+
+      if (this.$route.params.id) {
+        this.transactionLines.map(function (item) {
+          var product = _this.products.filter(function (p) {
+            return p.id === item.product_id;
+          });
+
+          item.product = product[0];
+          item.applyTax = parseFloat(item.tax) > 0;
+          item.taxAmount = item.tax ? parseFloat(item.tax) : 0;
+          item.tax_rate = parseFloat(item.tax_rate);
+          item.unitPrice = parseFloat(item.price);
+          item.tax_cat_id = product.length ? product[0].tax_cat_id : null;
+        });
+      }
+    },
+    taxRates: function taxRates() {
+      var _this2 = this;
+
+      if (this.$route.params.id) {
+        var rate = this.taxZones.filter(function (item) {
+          return parseInt(item.id) === _this2.taxRate;
+        });
+        this.taxRate = rate[0];
+      }
     }
   },
   computed: _objectSpread(_objectSpread({}, Object(__WEBPACK_IMPORTED_MODULE_3_vuex__["b" /* mapState */])({
@@ -21721,28 +21749,29 @@ function _objectSpread(target) { for (var i = 1; i < arguments.length; i++) { va
     totalAmount: function totalAmount() {
       var total = 0;
       this.transactionLines.forEach(function (item) {
-        if (item.product && item.quantity && item.unitPrice) {
-          total += parseInt(item.quantity) * parseFloat(item.unitPrice);
+        if (item.qty && item.unitPrice) {
+          total += parseInt(item.qty) * parseFloat(item.unitPrice);
         }
       });
       return total + this.taxTotalAmount;
     },
     taxTotalAmount: function taxTotalAmount() {
-      var _this = this;
+      var _this3 = this;
 
       if (!this.taxRate) return 0;
       var rates = this.taxRates.filter(function (item) {
-        return _this.taxRate.id == item.tax_rate_id;
+        return _this3.taxRate.id == item.tax_rate_id;
       });
       var totalTax = 0;
       this.transactionLines.map(function (item) {
-        if (item.product && item.quantity && item.unitPrice) {
+        if (item.product && item.qty && item.unitPrice) {
           if (item.applyTax && item.tax_cat_id && rates.length) {
             var taxRate = rates.filter(function (r) {
               return r.sales_tax_category_id == item.tax_cat_id;
             });
             taxRate = taxRate.length ? taxRate[0].tax_rate : 0;
-            item.taxAmount = item.quantity * item.unitPrice * taxRate / 100;
+            item.taxAmount = item.qty * item.unitPrice * taxRate / 100;
+            item.tax_rate = taxRate;
             totalTax += item.taxAmount;
           }
         }
@@ -21765,8 +21794,6 @@ function _objectSpread(target) { for (var i = 1; i < arguments.length; i++) { va
     }
   }),
   created: function created() {
-    var _this2 = this;
-
     if (this.$route.name === 'PurchaseOrderCreate') {
       this.page_title = 'Purchase Order';
       this.purchase_order = 1;
@@ -21781,24 +21808,10 @@ function _objectSpread(target) { for (var i = 1; i < arguments.length; i++) { va
     }
 
     this.prepareDataLoad();
-    this.$root.$on('remove-row', function (index) {
-      if (_this2.transactionLines.length < 2) {
-        return;
-      }
-
-      _this2.$delete(_this2.transactionLines, index);
-
-      _this2.updateFinalAmount();
-    });
-    this.$root.$on('total-updated', function (amount) {
-      _this2.updateFinalAmount();
-    }); // initialize combo button id with `update`
-
-    this.$store.dispatch('combo/setBtnID', 'update');
   },
   methods: {
     setLineData: function setLineData(line) {
-      line.quantity = 1;
+      line.qty = 1;
 
       if (this.$route.params.id) {
         line.unitPrice = parseFloat(line.product.cost_price);
@@ -21806,7 +21819,7 @@ function _objectSpread(target) { for (var i = 1; i < arguments.length; i++) { va
         line.unitPrice = parseFloat(line.product.unitPrice);
       }
 
-      line.amount = line.quantity * line.unitPrice;
+      line.amount = line.qty * line.unitPrice;
       line.tax_cat_id = line.product.tax_cat_id;
 
       if (parseInt(line.product.tax_cat_id)) {
@@ -21817,7 +21830,7 @@ function _objectSpread(target) { for (var i = 1; i < arguments.length; i++) { va
     },
     lineUpdate: function lineUpdate(index) {
       var line = this.transactionLines[index];
-      line.amount = parseInt(line.quantity) * parseFloat(line.unitPrice);
+      line.amount = parseInt(line.qty) * parseFloat(line.unitPrice);
       this.$set(this.transactionLines, index, line);
     },
     disableLineTax: function disableLineTax(index) {
@@ -21829,7 +21842,7 @@ function _objectSpread(target) { for (var i = 1; i < arguments.length; i++) { va
       this.transactionLines.splice(index, 1);
     },
     prepareDataLoad: function prepareDataLoad() {
-      var _this3 = this;
+      var _this4 = this;
 
       return __WEBPACK_IMPORTED_MODULE_1__babel_runtime_helpers_asyncToGenerator___default()( /*#__PURE__*/regeneratorRuntime.mark(function _callee() {
         var _yield$Promise$all, _yield$Promise$all2, request, canEdit, purchase_data;
@@ -21838,15 +21851,15 @@ function _objectSpread(target) { for (var i = 1; i < arguments.length; i++) { va
           while (1) {
             switch (_context.prev = _context.next) {
               case 0:
-                if (!_this3.$route.params.id) {
+                if (!_this4.$route.params.id) {
                   _context.next = 18;
                   break;
                 }
 
-                _this3.editMode = true;
-                _this3.voucherNo = _this3.$route.params.id;
+                _this4.editMode = true;
+                _this4.voucherNo = _this4.$route.params.id;
                 _context.next = 5;
-                return Promise.all([__WEBPACK_IMPORTED_MODULE_4_admin_http__["a" /* default */].get("/purchases/".concat(_this3.$route.params.id))]);
+                return Promise.all([__WEBPACK_IMPORTED_MODULE_4_admin_http__["a" /* default */].get("/purchases/".concat(_this4.$route.params.id))]);
 
               case 5:
                 _yield$Promise$all = _context.sent;
@@ -21859,7 +21872,7 @@ function _objectSpread(target) { for (var i = 1; i < arguments.length; i++) { va
                   break;
                 }
 
-                _this3.showAlert('error', 'Can\'t edit');
+                _this4.showAlert('error', 'Can\'t edit');
 
                 return _context.abrupt("return");
 
@@ -21867,13 +21880,13 @@ function _objectSpread(target) { for (var i = 1; i < arguments.length; i++) { va
                 purchase_data = request.data;
 
                 if (purchase_data) {
-                  _this3.getProducts(purchase_data.vendor_id);
+                  _this4.getProducts(purchase_data.vendor_id);
                 }
 
-                _this3.setDataForEdit(request.data); // initialize combo button id with `update`
+                _this4.setDataForEdit(request.data); // initialize combo button id with `update`
 
 
-                _this3.$store.dispatch('combo/setBtnID', 'update');
+                _this4.$store.dispatch('combo/setBtnID', 'update');
 
                 _context.next = 22;
                 break;
@@ -21884,13 +21897,13 @@ function _objectSpread(target) { for (var i = 1; i < arguments.length; i++) { va
                      * create a new purchase
                      * -----------------------------------------------
                      */
-                _this3.basic_fields.trn_date = erp_acct_var.current_date;
-                _this3.basic_fields.due_date = erp_acct_var.current_date;
+                _this4.basic_fields.trn_date = erp_acct_var.current_date;
+                _this4.basic_fields.due_date = erp_acct_var.current_date;
 
-                _this3.transactionLines.push({}, {}, {}); // initialize combo button id with `save`
+                _this4.transactionLines.push({}, {}, {}); // initialize combo button id with `save`
 
 
-                _this3.$store.dispatch('combo/setBtnID', 'save');
+                _this4.$store.dispatch('combo/setBtnID', 'save');
 
               case 22:
               case "end":
@@ -21901,6 +21914,8 @@ function _objectSpread(target) { for (var i = 1; i < arguments.length; i++) { va
       }))();
     },
     setDataForEdit: function setDataForEdit(purchase) {
+      var _this5 = this;
+
       this.basic_fields.vendor = {
         id: parseInt(purchase.vendor_id),
         name: purchase.vendor_name
@@ -21911,8 +21926,21 @@ function _objectSpread(target) { for (var i = 1; i < arguments.length; i++) { va
       this.basic_fields.due_date = purchase.due_date;
       this.status = purchase.status;
       this.transactionLines = purchase.line_items;
+      this.transactionLines.map(function (item) {
+        var product = _this5.products.filter(function (p) {
+          return p.id == item.product_id;
+        });
+
+        item.product = product[0];
+        item.applyTax = parseFloat(item.tax) > 0;
+        item.taxAmount = item.tax ? parseFloat(item.tax) : 0;
+        item.tax_rate = parseFloat(item.tax_rate);
+        item.unitPrice = parseFloat(item.price);
+        item.tax_cat_id = product.length ? product[0].tax_cat_id : null;
+      });
       this.particulars = purchase.particulars;
       this.attachments = purchase.attachments;
+      this.taxRate = parseInt(purchase.tax_zone_id); // for set is temporary. when taz zone loaded then set tax rate object
     },
     resetData: function resetData() {
       this.basic_fields = {
@@ -21934,7 +21962,7 @@ function _objectSpread(target) { for (var i = 1; i < arguments.length; i++) { va
       this.$store.dispatch('combo/setBtnID', 'save');
     },
     getProducts: function getProducts(vendor_id) {
-      var _this4 = this;
+      var _this6 = this;
 
       this.products = [];
 
@@ -21949,7 +21977,7 @@ function _objectSpread(target) { for (var i = 1; i < arguments.length; i++) { va
         }
       }).then(function (response) {
         response.data.forEach(function (element) {
-          _this4.products.push({
+          _this6.products.push({
             id: element.id,
             name: element.name,
             unitPrice: element.cost_price,
@@ -21958,24 +21986,24 @@ function _objectSpread(target) { for (var i = 1; i < arguments.length; i++) { va
           });
         });
 
-        _this4.getTaxRates();
+        _this6.getTaxRates();
 
-        _this4.$store.dispatch('spinner/setSpinner', false);
+        _this6.$store.dispatch('spinner/setSpinner', false);
       }).catch(function (error) {
-        _this4.$store.dispatch('spinner/setSpinner', false);
+        _this6.$store.dispatch('spinner/setSpinner', false);
 
         throw error;
       });
     },
     getTaxRates: function getTaxRates() {
-      var _this5 = this;
+      var _this7 = this;
 
       __WEBPACK_IMPORTED_MODULE_4_admin_http__["a" /* default */].get('/taxes/summary').then(function (response) {
-        _this5.taxRates = response.data;
+        _this7.taxRates = response.data;
       });
     },
     getvendorData: function getvendorData() {
-      var _this6 = this;
+      var _this8 = this;
 
       var vendor_id = this.basic_fields.vendor.id;
 
@@ -21993,7 +22021,7 @@ function _objectSpread(target) { for (var i = 1; i < arguments.length; i++) { va
         var postal_code = billing.postal_code ? billing.postal_code : '';
         var country = billing.country ? billing.country : '';
         var address = "".concat(street_1, " ").concat(street_2, " \n").concat(city, " \n").concat(state, " ").concat(postal_code, " \n").concat(country);
-        _this6.basic_fields.billing_address = address;
+        _this8.basic_fields.billing_address = address;
       });
       this.getProducts();
     },
@@ -22031,51 +22059,51 @@ function _objectSpread(target) { for (var i = 1; i < arguments.length; i++) { va
       return lineItems;
     },
     updatePurchase: function updatePurchase(requestData) {
-      var _this7 = this;
+      var _this9 = this;
 
       __WEBPACK_IMPORTED_MODULE_4_admin_http__["a" /* default */].put("/purchases/".concat(this.voucherNo), requestData).then(function (res) {
-        _this7.$store.dispatch('spinner/setSpinner', false);
+        _this9.$store.dispatch('spinner/setSpinner', false);
 
         var message = 'Purchase Updated!';
 
-        if (_this7.orderToPurchase()) {
+        if (_this9.orderToPurchase()) {
           message = 'Conversion Successful!';
         }
 
-        _this7.showAlert('success', message);
+        _this9.showAlert('success', message);
       }).then(function () {
-        _this7.$store.dispatch('spinner/setSpinner', false);
+        _this9.$store.dispatch('spinner/setSpinner', false);
 
-        _this7.isWorking = false;
-        _this7.reset = true;
+        _this9.isWorking = false;
+        _this9.reset = true;
 
-        if (_this7.actionType === 'update' || _this7.actionType === 'draft') {
-          _this7.$router.push({
+        if (_this9.actionType === 'update' || _this9.actionType === 'draft') {
+          _this9.$router.push({
             name: 'Purchases'
           });
-        } else if (_this7.actionType === 'new_update') {
-          _this7.resetFields();
+        } else if (_this9.actionType === 'new_update') {
+          _this9.resetFields();
         }
       });
     },
     createPurchase: function createPurchase(requestData) {
-      var _this8 = this;
+      var _this10 = this;
 
       __WEBPACK_IMPORTED_MODULE_4_admin_http__["a" /* default */].post('/purchases', requestData).then(function (res) {
-        _this8.$store.dispatch('spinner/setSpinner', false);
+        _this10.$store.dispatch('spinner/setSpinner', false);
 
-        _this8.showAlert('success', _this8.page_title + ' Created!');
+        _this10.showAlert('success', _this10.page_title + ' Created!');
       }).catch(function (error) {
-        _this8.$store.dispatch('spinner/setSpinner', false);
+        _this10.$store.dispatch('spinner/setSpinner', false);
 
         throw error;
       }).then(function () {
-        if (_this8.actionType === 'save' || _this8.actionType === 'draft') {
-          _this8.$router.push({
+        if (_this10.actionType === 'save' || _this10.actionType === 'draft') {
+          _this10.$router.push({
             name: 'Purchases'
           });
-        } else if (_this8.actionType === 'new_create') {
-          _this8.resetFields();
+        } else if (_this10.actionType === 'new_create') {
+          _this10.resetFields();
         }
       });
     },
@@ -22625,6 +22653,7 @@ if (false) {(function () {
 //
 //
 //
+//
 
 
 
@@ -22659,6 +22688,15 @@ if (false) {(function () {
     this.$root.$on('close', function () {
       _this.showModal = false;
     });
+  },
+  computed: {
+    total: function total() {
+      return {
+        basic: parseFloat(this.purchase.amount),
+        tax: parseFloat(this.purchase.tax),
+        final: parseFloat(this.purchase.amount) + parseFloat(this.purchase.tax)
+      };
+    }
   },
   methods: {
     getCompanyInfo: function getCompanyInfo() {
@@ -51580,8 +51618,8 @@ var render = function() {
                             {
                               name: "model",
                               rawName: "v-model",
-                              value: line.quantity,
-                              expression: "line.quantity"
+                              value: line.qty,
+                              expression: "line.qty"
                             }
                           ],
                           staticClass: "wperp-form-field",
@@ -51591,7 +51629,7 @@ var render = function() {
                             name: "qty",
                             required: !!line.product
                           },
-                          domProps: { value: line.quantity },
+                          domProps: { value: line.qty },
                           on: {
                             keyup: function($event) {
                               return _vm.lineUpdate(index)
@@ -51600,7 +51638,7 @@ var render = function() {
                               if ($event.target.composing) {
                                 return
                               }
-                              _vm.$set(line, "quantity", $event.target.value)
+                              _vm.$set(line, "qty", $event.target.value)
                             }
                           }
                         })
@@ -51813,7 +51851,10 @@ var render = function() {
                           staticClass: "tax-rates",
                           attrs: {
                             options: _vm.taxZones,
-                            placeholder: _vm.__("Select sales tax", "erp")
+                            placeholder: _vm.__(
+                              "Select Purchase Vat Zone",
+                              "erp"
+                            )
                           },
                           model: {
                             value: _vm.taxRate,
@@ -52408,11 +52449,23 @@ var render = function() {
                                   ]),
                                   _vm._v(
                                     " " +
-                                      _vm._s(
-                                        _vm.moneyFormat(_vm.purchase.amount)
-                                      )
+                                      _vm._s(_vm.moneyFormat(_vm.total.basic))
                                   )
                                 ]),
+                                _vm._v(" "),
+                                _vm.total.tax
+                                  ? _c("li", [
+                                      _c("span", [
+                                        _vm._v(
+                                          _vm._s(_vm.__("Tax", "erp")) + ":"
+                                        )
+                                      ]),
+                                      _vm._v(
+                                        " " +
+                                          _vm._s(_vm.moneyFormat(_vm.total.tax))
+                                      )
+                                    ])
+                                  : _vm._e(),
                                 _vm._v(" "),
                                 _c("li", [
                                   _c("span", [
@@ -52420,9 +52473,7 @@ var render = function() {
                                   ]),
                                   _vm._v(
                                     " " +
-                                      _vm._s(
-                                        _vm.moneyFormat(_vm.purchase.amount)
-                                      )
+                                      _vm._s(_vm.moneyFormat(_vm.total.final))
                                   )
                                 ])
                               ])
